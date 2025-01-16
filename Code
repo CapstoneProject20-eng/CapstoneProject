@@ -1,0 +1,118 @@
+#define BLYNK_TEMPLATE_ID "TMPL3cAapFqdk"
+#define BLYNK_TEMPLATE_NAME "FACTORY AUTOMATION SYSTEM"
+#define LED_PIN1 D6
+#define LED_PIN2 D7
+
+#include <ESP8266WiFi.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <BlynkSimpleEsp8266.h>
+
+// Blynk Auth Token
+char auth[] = "zLySdKFM1xRV6bH1cCrh-9R6AC4fPBBM";
+
+// WiFi credentials
+char ssid[] = "sanketh";
+char pass[] = "1234567890";
+
+// Define pins for motor driver (fan control)
+const int motorPin1 = D3; // IN1 on motor driver
+const int motorPin2 = D4; // IN2 on motor driver
+const int enablePin = D5; // ENA on motor driver (PWM control)
+const int potPin = A0;    // Potentiometer connected to A0 pin
+
+// Initialize the LCD (I2C address 0x27, 16 columns, 2 rows)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+bool fanEnabled = false; // Flag to check if fan is enabled
+
+void setup() {
+  Serial.begin(115200);
+
+  // Connect to WiFi and Blynk
+  Blynk.begin(auth, ssid, pass);
+
+  // Set motor driver pins as outputs
+  pinMode(motorPin1, OUTPUT);
+  pinMode(motorPin2, OUTPUT);
+  pinMode(enablePin, OUTPUT);
+  pinMode(LED_PIN1, OUTPUT);
+  pinMode(LED_PIN2, OUTPUT);
+
+  // Initialize motor driver (fan off by default)
+  digitalWrite(motorPin1, LOW);
+  digitalWrite(motorPin2, LOW);
+  analogWrite(enablePin, 0); // 0 PWM (fan off)
+
+  // Initialize the LCD
+  lcd.init();
+  lcd.backlight();
+
+  // Initial LCD message
+  
+}
+
+// Function to update the LCD display
+void display(int potValue) {
+  lcd.setCursor(0, 0);
+  lcd.print("                   ");
+  lcd.setCursor(0,0);
+  lcd.print("Temperature");
+  lcd.setCursor(0, 1);
+  lcd.print("              ");
+  lcd.setCursor(0, 1);
+  lcd.print("Value: ");
+  // Display the potentiometer value
+  lcd.setCursor(7, 1); // Move to the correct position
+  lcd.print("     ");  // Clear previous value
+  lcd.setCursor(7, 1); // Move back to the correct position
+  lcd.print(potValue);
+}
+
+// Blynk virtual pin handler for the fan control switch (V0)
+BLYNK_WRITE(V0) {
+  fanEnabled = param.asInt(); // Get switch state (0 or 1)
+  if (!fanEnabled) {
+    // If switch is off, turn off the fan immediately
+    digitalWrite(motorPin1, LOW);
+    digitalWrite(motorPin2, LOW);
+    analogWrite(enablePin, 0); // Stop fan (no PWM signal)// Display Fan: OFF
+  }
+}
+
+void loop() {
+  Blynk.run();
+  int potValue = analogRead(potPin); 
+  Blynk.virtualWrite(V1, potValue);
+// Read potentiometer value
+  if (potValue>500){
+    Blynk.logEvent("temperatur_alert_critical");
+    digitalWrite(LED_PIN1, HIGH);
+    digitalWrite(LED_PIN2, LOW);
+    lcd.setCursor(0, 0);
+    lcd.print("HIGH TEMP ALERT"); // Display High Temperature Alert
+    lcd.setCursor(0, 1); // Move cursor to the second line
+    lcd.print("Take Action");
+    lcd.setCursor(7, 1); // Move to the correct position
+    lcd.print("     ");
+  }
+  else{
+    digitalWrite(LED_PIN1, LOW);
+    digitalWrite(LED_PIN2, HIGH);
+    display(potValue); 
+  }           
+  // Check if potentiometer value exceeds 500 and fan is enabled
+  if (potValue > 500 && fanEnabled) {
+  // Clear previous value
+    digitalWrite(motorPin1, HIGH);   // Turn the fan on
+    digitalWrite(motorPin2, LOW);    // Ensure correct direction for fan
+    analogWrite(enablePin, 255);     // Set PWM to full speed to turn the fan on
+  } else if (fanEnabled) {
+
+    digitalWrite(motorPin1, LOW);    // Turn the fan off
+    digitalWrite(motorPin2, LOW);    // Ensure the fan is off
+    analogWrite(enablePin, 0);
+  }
+
+  delay(100); // Small delay to stabilize display
+}
